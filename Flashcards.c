@@ -1,37 +1,47 @@
 // PortainerIO
-//openmediavault ist das Betriebssystem
-// als Stack
-
+// openmediavault ist das Betriebssystem
+// als Stack die Datenbank definieren mit PORT usw
+// wie kann ich automatisch die Tabellen dafür bereitstellen?
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-// #ifdef _WIN32
+#include <tgmath.h>
+#include <time.h>
+#ifdef _WIN32
   #include <windows.h>
-// #endif
+#endif
 
-// max Länge für Vorderseite und Rückseite definiert
+// Maximale Länge für Vorder- und Rückseite
 #define MAX_TEXT_LENGTH 256
 
-// Definition eines Knotens der doppelt verketteten Liste
+// Erweiterte Struktur: zusätzliches Feld 'id' für die fortlaufende Nummer
 typedef struct FlashcardNode {
+    int id;  // Eindeutige Nummer für die Sortierung
     char front[MAX_TEXT_LENGTH];
     char back[MAX_TEXT_LENGTH];
     int spacedRepCount;
+    int repetitions;       // Anzahl der Wiederholungen (hintereinander richtige Antworten)
+    double ease_factor;    // E-Faktor (Lernfaktor zur Intervallanpassung)
+    int interval;          // aktuelles Intervall in Tagen bis zur nächsten Wiederholung
+    time_t last_review;    // Zeitpunkt der letzten Abfrage
+    time_t next_review;    // Zeitpunkt, wann die Karte wieder fällig ist
     struct FlashcardNode *prev;
     struct FlashcardNode *next;
 } FlashcardNode;
 
-// Globale Zeiger auf den Kopf und das Ende der Liste
+// Globale Zeiger auf Kopf und Ende der Liste sowie globaler Zähler für IDs
 FlashcardNode* ptr_head = NULL;
 FlashcardNode* ptr_tail = NULL;
+int next_id = 1; // Nächste zu vergebende ID
 
-/* Entfernt das Newline-Zeichen aus einem String */
+/*
+ *summary:
+ * Entfernt das Newline-Zeichen aus einem String
+ */
 void removeNewline(char *ptr_str) {
     ptr_str[strcspn(ptr_str, "\n")] = '\0';
 }
 
-/* Funktion zum Hinzufügen einer neuen Karteikarte (am Ende der Liste) */
 void addFlashcard() {
     FlashcardNode* ptr_newNode = (FlashcardNode*) malloc(sizeof(FlashcardNode));
     if (!ptr_newNode) {
@@ -41,6 +51,7 @@ void addFlashcard() {
     ptr_newNode->prev = NULL;
     ptr_newNode->next = NULL;
     ptr_newNode->spacedRepCount = 0;
+    ptr_newNode->id = next_id++; // Vergibt fortlaufende ID
 
     printf("Geben Sie die Vorderseite (Frage) der Karte ein:\n> ");
     if (fgets(ptr_newNode->front, MAX_TEXT_LENGTH, stdin) == NULL) {
@@ -56,7 +67,7 @@ void addFlashcard() {
     }
     removeNewline(ptr_newNode->back);
 
-    // Knoten am Ende der Liste anhängen
+    // Knoten ans Ende der Liste anhängen
     if (ptr_head == NULL) {
         ptr_head = ptr_newNode;
         ptr_tail = ptr_newNode;
@@ -68,6 +79,11 @@ void addFlashcard() {
     printf("Karteikarte hinzugefügt.\n");
 }
 
+/*
+ *summary:
+ *Funktion zum Hinzufügen einer neuen Karteikarte
+ */
+
 /* Funktion zum Auflisten aller Karteikarten */
 void listFlashcards() {
     if (ptr_head == NULL) {
@@ -77,13 +93,18 @@ void listFlashcards() {
     int count = 1;
     FlashcardNode* current = ptr_head;
     while (current != NULL) {
-        printf("%d.\n  Vorderseite: %s\n  Rueckseite: %s\n SPA: %d", count, current->front, current->back, current->spacedRepCount);
+        printf("%d. (ID: %d)\n  Vorderseite: %s\n  Rueckseite: %s\n  SPA: %d\n",
+            count, current->id, current->front, current->back, current->spacedRepCount);
         count++;
         current = current->next;
     }
 }
 
-/* Funktion zum Lernen der Karteikarten */
+/*
+ * summary:
+ * Funktion zum Lernen der Karteikarten mit Angabe des "Space Rep Counts"
+ * Dieser wird mit einer Konstante multipliziert und je nachdem früher oder später abgefragt
+ */
 void studyFlashcards() {
     if (ptr_head == NULL) {
         printf("Keine Karteikarten zum Lernen vorhanden.\n");
@@ -100,7 +121,7 @@ void studyFlashcards() {
 
         printf("1=einfach 0=schwer -1=nicht gewusst\n");
         if (fgets(dummy, sizeof(dummy), stdin ) != NULL) {
-            int factor = atoi(dummy);  // Wandelt den Eingabestring in einen int um
+            int factor = atoi(dummy);
             if (factor == -1 || factor == 0 || factor == 1) {
                 current->spacedRepCount += factor;
             }
@@ -110,8 +131,117 @@ void studyFlashcards() {
     }
 }
 
-/* Überprüft, ob eine Datei existiert.
-   Gibt 1 zurück, falls ja, sonst 0. */
+/*
+ * summary:
+ * updated das Intervall welches bestimmt, wann eine Karte das nächste Mal angefragt wird
+ * parameters:
+ * FlashcardNode *curr: zeigt auf das aktuelle
+ * int rating: Der Wert, den der Benutzer übergeben hat, wie gut er die Karte konnte.
+ */
+void update_card_interval(FlashcardNode *curr, int rating) {
+    // 1. Aktuelle Werte aus der Karte laden
+    int rep = curr->repetitions;
+    double efactor = curr->ease_factor;
+    int interval = curr->interval;
+
+    // 2. Bewertung (-1,0,1) auf SM-2 Qualitätsfaktor 0-5 abbilden
+    int quality;
+    if (rating == 1) {
+        quality = 5;   // sehr gutes Ergebnis
+    } else if (rating == 0) {
+        quality = 3;   // gerade noch gewusst
+    } else { // rating == -1
+        quality = 2;   // nicht gewusst
+    }
+
+    // 3. E-Faktor anpassen (Lernfaktor aktualisieren)
+    // Formel: EF' = EF_alt + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02))
+    efactor = efactor + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02));
+    if (efactor < 1.3) {
+        efactor = 1.3;  // Minimum E-Faktor von 1.3 sicherstellen
+    }
+
+    // 4. Wiederholungszähler aktualisieren
+    if (quality < 3) {
+        // Antwort war schlecht -> reset der Wiederholungsfolge
+        rep = 0;
+    } else {
+        // gute Antwort -> Wiederholungszähler erhöhen
+        rep += 1;
+    }
+
+    // 5. Wiederholungsintervall berechnen (in Tagen)
+    if (rep <= 1) {
+        interval = 1;           // nach erster (oder Reset-)Lernrunde: 1 Tag
+    } else if (rep == 2) {
+        interval = 6;           // nach der zweiten richtigen Wiederholung: 6 Tage
+    } else {
+        // ab der dritten Wiederholung: vorheriges Intervall mit Faktor multiplizieren
+        interval = (int)ceil(interval * efactor);
+    }
+
+    // 6. Nächstes Wiederholungsdatum (Timestamp) berechnen
+    time_t now = time(NULL);
+    double seconds_per_day = 24 * 60 * 60;
+    curr->last_review = now;
+    curr->next_review = now + (time_t)(interval * seconds_per_day);
+
+    // 7. Aktualisierte Werte zurück in die Karte speichern
+    curr->repetitions = rep;
+    curr->ease_factor = efactor;
+    curr->interval = interval;
+}
+
+
+/*
+ * summary:
+ * Vertauscht alle inhaltlichen Felder von zwei FlashcardNode-Knoten,
+ * ohne die Verkettung (prev/next) zu verändern.
+ */
+void swapNodeContents(FlashcardNode* a, FlashcardNode* b) {
+    int temp_id = a->id;
+    a->id = b->id;
+    b->id = temp_id;
+
+    char temp_front[MAX_TEXT_LENGTH];
+    char temp_back[MAX_TEXT_LENGTH];
+    strcpy(temp_front, a->front);
+    strcpy(temp_back, a->back);
+    strcpy(a->front, b->front);
+    strcpy(a->back, b->back);
+    strcpy(b->front, temp_front);
+    strcpy(b->back, temp_back);
+
+    int temp_spacedRepCount = a->spacedRepCount;
+    a->spacedRepCount = b->spacedRepCount;
+    b->spacedRepCount = temp_spacedRepCount;
+
+    int temp_repetitions = a->repetitions;
+    a->repetitions = b->repetitions;
+    b->repetitions = temp_repetitions;
+
+    double temp_ease_factor = a->ease_factor;
+    a->ease_factor = b->ease_factor;
+    b->ease_factor = temp_ease_factor;
+
+    int temp_interval = a->interval;
+    a->interval = b->interval;
+    b->interval = temp_interval;
+
+    time_t temp_last_review = a->last_review;
+    a->last_review = b->last_review;
+    b->last_review = temp_last_review;
+
+    time_t temp_next_review = a->next_review;
+    a->next_review = b->next_review;
+    b->next_review = temp_next_review;
+}
+
+/*
+ * summary:
+ * Überprüft, ob eine Datei existiert
+ *
+ */
 int fileExists(const char *filename) {
 #ifdef _WIN32
     DWORD attr = GetFileAttributes(filename);
@@ -127,8 +257,8 @@ int fileExists(const char *filename) {
 }
 
 /*
+ * summary:
  * Funktion zum Speichern der Karteikarten in einer JSON-Datei
- *
  */
 void saveFlashcardsToFile(const char *ptr_filename) {
     if (fileExists(ptr_filename)) {
@@ -148,23 +278,15 @@ void saveFlashcardsToFile(const char *ptr_filename) {
     FlashcardNode* current = ptr_head;
     while (current != NULL) {
         fprintf(ptr_file, "    {\n");
-
-        // "front" wird als erstes ausgegeben
         fprintf(ptr_file, "      \"front\": \"%s\",\n", current->front);
-
-        // "back" wird als zweites ausgegeben; hier folgt ein Komma, um den nächsten Eintrag zu trennen
         fprintf(ptr_file, "      \"back\": \"%s\",\n", current->back);
-
-        // "spacedRepCount" wird als drittes ausgegeben, hier ohne Anführungszeichen (als Zahl)
         fprintf(ptr_file, "      \"spacedRepCount\": %d\n", current->spacedRepCount);
-        // Falls dies der letzte Knoten ist, kein Komma hinter der schließenden Klammer schreiben
         if (current->next == NULL)
             fprintf(ptr_file, "    }\n");
         else
             fprintf(ptr_file, "    },\n");
         current = current->next;
     }
-    // JSON-Abschluss schreiben
     fprintf(ptr_file, "  ]\n}\n");
     fclose(ptr_file);
     printf("Karteikarten wurden in \"%s\" gespeichert.\n", ptr_filename);
@@ -182,12 +304,7 @@ void freeFlashcards() {
     ptr_tail = NULL;
 }
 
-/*
-  Funktion zum Laden der Karteikarten aus einer JSON-Datei.
-  Die Implementierung durchsucht Zeilen nach den Schlüsseln "front" und "back"
-  und erstellt für jeden Eintrag einen neuen Knoten in der verketteten Liste.
-  Es wird vorausgesetzt, dass die Datei exakt im Format von saveFlashcardsToFile() vorliegt.
-*/
+/* Funktion zum Laden der Karteikarten aus einer JSON-Datei */
 void loadFlashcardsFromFile(const char *filename) {
     FILE *file = fopen(filename, "r");
     if (!file) {
@@ -195,7 +312,7 @@ void loadFlashcardsFromFile(const char *filename) {
         return;
     }
 
-    // Vor dem Laden bestehende Karteikarten freigeben
+    // Bestehende Karteikarten freigeben
     freeFlashcards();
 
     char line[512];
@@ -244,14 +361,11 @@ void loadFlashcardsFromFile(const char *filename) {
             }
 
             // Als nächstes sollte die Zeile mit "spacedRepCount" kommen:
-            int parsedCount = 0; // Standardwert, falls nichts gefunden wird
+            int parsedCount = 0;
             if (fgets(line, sizeof(line), file)) {
                 if (strstr(line, "\"spacedRepCount\":") != NULL) {
-                    // Hier gehen wir davon aus, dass der Wert als Zahl gespeichert wurde,
-                    // also ohne Anführungszeichen (wie in unserem neuen saveFlashcardsToFile)
                     char *colonPtr = strchr(line, ':');
                     if (colonPtr) {
-                        // Falls noch ein Komma oder Leerzeichen vorhanden sind, überspringen wir diese:
                         colonPtr++;
                         while (*colonPtr == ' ' || *colonPtr == ',')
                             colonPtr++;
@@ -267,6 +381,8 @@ void loadFlashcardsFromFile(const char *filename) {
                 fclose(file);
                 return;
             }
+            // IDs werden neu vergeben
+            newNode->id = 0;
             strncpy(newNode->front, frontText, MAX_TEXT_LENGTH);
             newNode->front[MAX_TEXT_LENGTH - 1] = '\0';
             strncpy(newNode->back, backText, MAX_TEXT_LENGTH);
@@ -275,7 +391,6 @@ void loadFlashcardsFromFile(const char *filename) {
             newNode->prev = NULL;
             newNode->next = NULL;
 
-            // An die Liste anhängen
             if (ptr_head == NULL) {
                 ptr_head = newNode;
                 ptr_tail = newNode;
@@ -288,16 +403,16 @@ void loadFlashcardsFromFile(const char *filename) {
     }
     fclose(file);
 
-    // Zähle die geladenen Karteikarten
-    int count = 0;
+    // IDs neu vergeben (basierend auf der aktuellen Reihenfolge)
+    int count = 1;
     FlashcardNode* current = ptr_head;
     while (current != NULL) {
-        count++;
+        current->id = count++;
         current = current->next;
     }
-    printf("%d Karteikarten geladen.\n", count);
+    next_id = count;
+    printf("%d Karteikarten geladen.\n", count - 1);
 }
-
 
 /* Funktion zum Löschen einer Karteikarte anhand ihrer Nummer */
 void deleteFlashcard() {
@@ -340,15 +455,37 @@ void deleteFlashcard() {
     printf("Karteikarte %d wurde gelöscht.\n", number);
 }
 
-/* Funktion zum Neu-„nummerieren“ der Karteikarten.
-   Da die Nummerierung in einer verketteten Liste beim Durchlaufen ermittelt wird,
-   dient diese Funktion lediglich als Bestätigung. */
+/* Funktion zum Neu-„nummerieren“ der Karteikarten */
 void renumberFlashcards() {
     printf("Die Karteikarten wurden neu nummeriert.\n");
 }
 
-int main() {
-    /* Beispielhafter Pfad – passe diesen Pfad an deine Gegebenheiten an */
+
+/* Sortiert die Karteikarten anhand der id.
+   Bei ascending ≠ 0 erfolgt eine aufsteigende Sortierung, sonst absteigend.
+*/
+void sortFlashcardsById(int ascending) {
+    if (ptr_head == NULL)
+        return;
+    int swapped;
+    do {
+        swapped = 0;
+        FlashcardNode* current = ptr_head;
+        while (current->next != NULL) {
+            int condition = ascending ? (current->id > current->next->id) : (current->id < current->next->id);
+            if (condition) {
+                swapNodeContents(current, current->next);
+                swapped = 1;
+            }
+            current = current->next;
+        }
+    } while (swapped);
+}
+
+// Inputs an das Programm sollen über
+// argc und argv[] übergeben werden
+int main(int argc, char * argv[]) {
+    /* Speicherort der JSON Datei */
     const char *filename = "C:\\Users\\herrmannja\\Downloads\\flashcards.json";
 
     // Versuche, bereits existierende Karteikarten zu laden
@@ -365,6 +502,8 @@ int main() {
         printf("4. Karteikarten speichern\n");
         printf("5. Karteikarte loeschen\n");
         printf("6. Beenden\n");
+        printf("7. Karteikarten aufsteigend sortieren\n");
+        printf("8. Karteikarten absteigend sortieren\n");
         printf("Ihre Wahl: ");
 
         if (fgets(input, sizeof(input), stdin) == NULL)
@@ -388,12 +527,19 @@ int main() {
                 deleteFlashcard();
                 break;
             case 6:
-                // Vor dem Beenden speichern und alle Ressourcen freigeben
                 saveFlashcardsToFile(filename);
                 renumberFlashcards();
                 freeFlashcards();
                 printf("Programm beendet.\n");
                 exit(0);
+            case 7:
+                sortFlashcardsById(1);
+                printf("Karteikarten wurden aufsteigend sortiert.\n");
+                break;
+            case 8:
+                sortFlashcardsById(0);
+                printf("Karteikarten wurden absteigend sortiert.\n");
+                break;
             default:
                 printf("Ungültige Eingabe. Bitte erneut versuchen.\n");
         }
