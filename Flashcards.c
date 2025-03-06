@@ -2,6 +2,8 @@
 // openmediavault ist das Betriebssystem
 // als Stack die Datenbank definieren mit PORT usw
 
+// DIE TIMESTAMPS SOLLEN NOCH IN DER JSON GESPEICHERT WERDEN
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
