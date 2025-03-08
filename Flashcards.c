@@ -4,7 +4,7 @@
 //
 // DIE TIMESTAMPS SOLLEN NOCH IN DER JSON GESPEICHERT WERDEN
 // MySql installer muss es geben
-//
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
