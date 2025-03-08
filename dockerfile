@@ -1,5 +1,10 @@
 FROM gcc:latest
+
 WORKDIR /usr/src/app
-COPY . .
-RUN gcc -o flashcards Flashcards.c
+
+
+
+# Wichtig: Hier -lm anhängen, damit die Mathe-Bibliothek gelinkt wird.
+RUN gcc -o flashcards Flashcards.c -lm
+
 CMD ["./flashcards"]
