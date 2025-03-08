@@ -53,10 +53,10 @@ typedef struct FlashcardNode {
     char back[MAX_TEXT_LENGTH];
     /* Die Variable spacedRepCount wurde entfernt, da sie nicht mehr benötigt wird */
     int repetitions;       // Anzahl der Wiederholungen (hintereinander richtige Antworten)
-    double ease_factor;    // E-Faktor (Lernfaktor zur Intervallanpassung)
+    double easeFactor;    // E-Faktor (Lernfaktor zur Intervallanpassung)
     int interval;          // aktuelles Intervall (in Tagen oder, im Testmodus, in Minuten)
-    time_t last_review;     // Zeitpunkt der letzten Abfrage
-    time_t next_review;   // Zeitpunkt, wann die Karte wieder fällig ist
+    time_t lastReview;     // Zeitpunkt der letzten Abfrage
+    time_t nextReview;   // Zeitpunkt, wann die Karte wieder fällig ist
     struct FlashcardNode *prev;
     struct FlashcardNode *next;
 } FlashcardNode;
@@ -83,27 +83,35 @@ void removeNewline(char *ptrStr) {
 void addFlashcard() {
     // Speicher für den neuen Node, die Karteikarte allokieren
     FlashcardNode* ptrNewNode = malloc(sizeof(FlashcardNode));
+
+    // Falls kein Speicher mehr für einen neuen Knoten allokiert werden kann, bricht die Methode ab
     if (!ptrNewNode) {
         printf("Fehler bei der Speicherzuweisung.\n");
         return;
     }
+
+    // prev & next auf NULL weil neues Element noch nicht in der Liste ist
     ptrNewNode->prev = NULL;
     ptrNewNode->next = NULL;
-    ptrNewNode->id = next_id++;
+    ptrNewNode->id = next_id++; //id ist 1 höher als die vorherige
 
-    ptrNewNode->repetitions = 0;
-    ptrNewNode->ease_factor = 2.5;
+    // Die Bestandteile des SM2 Algorithmus
+    ptrNewNode->repetitions = 0; // Karte wurde 0x wiederholt
+    ptrNewNode->easeFactor = 2.5; //Standartwert für den Schwierigkeitsgrad
     ptrNewNode->interval = 1; // Testmodus: 1 Minute, sonst 1 Tag
-    ptrNewNode->last_review = time(NULL);
-    ptrNewNode->next_review = ptrNewNode->last_review; // sofort fällig
+    ptrNewNode->lastReview = time(NULL); // Der Zeitstempel wann die nächste Wiederholung fällig ist
+    ptrNewNode->nextReview = ptrNewNode->lastReview; // sofort fällig
+
 
     printf("Geben Sie die Vorderseite (Frage) der Karte ein:\n> ");
+    // falls fgets NULL zurückgibt, wird der Speicher wieder freigegeben
     if (fgets(ptrNewNode->front, MAX_TEXT_LENGTH, stdin) == NULL) {
         free(ptrNewNode);
         return;
     }
     removeNewline(ptrNewNode->front);
 
+    // Das Selbe für die Rückseite
     printf("Geben Sie die Rueckseite der Karte ein:\n> ");
     if (fgets(ptrNewNode->back, MAX_TEXT_LENGTH, stdin) == NULL) {
         free(ptrNewNode);
@@ -136,7 +144,7 @@ void listFlashcards() {
     FlashcardNode* current = ptrHead;
     char timeBuffer[100];
     while (current != NULL) {
-        struct tm *tmInfo = localtime(&current->next_review);
+        struct tm *tmInfo = localtime(&current->nextReview);
         strftime(timeBuffer, sizeof(timeBuffer), "%Y-%m-%d %H:%M:%S", tmInfo);
         printf("%d. (ID: %d)\n  Vorderseite: %s\n  Rueckseite: %s\n  Naechste Wiederholung: %s\n",
                count, current->id, current->front, current->back, timeBuffer);
@@ -190,21 +198,21 @@ void swapNodeContents(FlashcardNode* a, FlashcardNode* b) {
     a->repetitions = b->repetitions;
     b->repetitions = temp_repetitions;
 
-    double temp_ease_factor = a->ease_factor;
-    a->ease_factor = b->ease_factor;
-    b->ease_factor = temp_ease_factor;
+    double temp_ease_factor = a->easeFactor;
+    a->easeFactor = b->easeFactor;
+    b->easeFactor = temp_ease_factor;
 
     int temp_interval = a->interval;
     a->interval = b->interval;
     b->interval = temp_interval;
 
-    time_t temp_last_review = a->last_review;
-    a->last_review = b->last_review;
-    b->last_review = temp_last_review;
+    time_t temp_last_review = a->lastReview;
+    a->lastReview = b->lastReview;
+    b->lastReview = temp_last_review;
 
-    time_t temp_next_review = a->next_review;
-    a->next_review = b->next_review;
-    b->next_review = temp_next_review;
+    time_t temp_next_review = a->nextReview;
+    a->nextReview = b->nextReview;
+    b->nextReview = temp_next_review;
 }
 
 /*
@@ -275,10 +283,10 @@ void saveFlashcardsToFile() {
         fprintf(ptr_file, "      \"front\": \"%s\",\n", current->front);
         fprintf(ptr_file, "      \"back\": \"%s\",\n", current->back);
         fprintf(ptr_file, "      \"repetitions\": %d,\n", current->repetitions);
-        fprintf(ptr_file, "      \"ease_factor\": %.2f,\n", current->ease_factor);
+        fprintf(ptr_file, "      \"ease_factor\": %.2f,\n", current->easeFactor);
         fprintf(ptr_file, "      \"interval\": %d,\n", current->interval);
-        fprintf(ptr_file, "      \"last_review\": %ld,\n", current->last_review);
-        fprintf(ptr_file, "      \"next_review\": %ld\n", current->next_review);
+        fprintf(ptr_file, "      \"last_review\": %ld,\n", current->lastReview);
+        fprintf(ptr_file, "      \"next_review\": %ld\n", current->nextReview);
         if (current->next == NULL)
             fprintf(ptr_file, "    }\n");
         else
@@ -415,7 +423,7 @@ void loadFlashcardsFromFile(const char *filename) {
                     ease_factor = atof(colonEf + 1);
                 }
             }
-            newNode->ease_factor = ease_factor;
+            newNode->easeFactor = ease_factor;
 
             // --- Parsing des "interval" Feldes ---
             if (!fgets(line, sizeof(line), file)) break;
@@ -440,7 +448,7 @@ void loadFlashcardsFromFile(const char *filename) {
                     last_review = (time_t)atol(colonLast + 1);
                 }
             }
-            newNode->last_review = last_review;
+            newNode->lastReview = last_review;
 
             // --- Parsing des "next_review" Feldes ---
             if (!fgets(line, sizeof(line), file)) break;
@@ -452,7 +460,7 @@ void loadFlashcardsFromFile(const char *filename) {
                     next_review = (time_t)atol(colonNext + 1);
                 }
             }
-            newNode->next_review = next_review;
+            newNode->nextReview = next_review;
 
             // --- Hinzufügen des neuen Knotens zur verketteten Liste ---
             if (ptrHead == NULL) {
@@ -555,7 +563,7 @@ void sortFlashcardsById(int ascending) {
  */
 void update_card_interval_test(FlashcardNode *curr, int rating) {
     int rep = curr->repetitions;
-    double efactor = curr->ease_factor;
+    double efactor = curr->easeFactor;
     int interval = curr->interval;
     int quality;
     if (rating == 1) {
@@ -583,10 +591,10 @@ void update_card_interval_test(FlashcardNode *curr, int rating) {
     }
     time_t now = time(NULL);
     double seconds_per_minute = 60;
-    curr->last_review = now;
-    curr->next_review = now + (time_t)(interval * seconds_per_minute);
+    curr->lastReview = now;
+    curr->nextReview = now + (time_t)(interval * seconds_per_minute);
     curr->repetitions = rep;
-    curr->ease_factor = efactor;
+    curr->easeFactor = efactor;
     curr->interval = interval;
 }
 
@@ -602,7 +610,7 @@ void bubbleSortByNextReview() {
         swapped = 0;
         FlashcardNode* current = ptrHead;
         while (current->next != NULL) {
-            if (current->next_review > current->next->next_review) {
+            if (current->nextReview > current->next->nextReview) {
                 swapNodeContents(current, current->next);
                 swapped = 1;
             }
@@ -676,7 +684,7 @@ void studyFlashcardsByDueDateTest() {
     FlashcardNode* current = ptrHead;
     time_t now = time(NULL);
     while (current != NULL) {
-        if (difftime(now, current->next_review) >= 0) {
+        if (difftime(now, current->nextReview) >= 0) {
             printf("\n[Due Karte %d] Frage: %s\n", count, current->front);
             printf("Druecken Sie Enter, um die Antwort zu sehen...");
             fgets(dummy, sizeof(dummy), stdin);
