@@ -332,10 +332,12 @@ void saveFlashcardsToFile() {
 }
 
 
-/*
+/* FERTIG
  * summary:
- * Lädt Karteikarten aus einer JSON-Datei und fügt sie in die verkettete Liste ein.
+ * Lädt Flashcards aus einer JSON-Datei in eine verkettete Liste. Existierende Karten werden freigegeben,
+ * neue Karten zeilenweise geparst und angehängt, und am Ende werden fortlaufende IDs vergeben.
  */
+
 void loadFlashcardsFromFile(const char *filename) {
     // öffne die Datei zum Lesen.
     FILE *file = fopen(filename, "r");
@@ -517,8 +519,7 @@ void loadFlashcardsFromFile(const char *filename) {
  * Sortiert die Karteikarten in aufsteigender oder absteigender Reihenfolge nach ihrer ID.
  * Das Sortieren wird durch das Tauschen der **Zeiger** (`prev` und `next`) umgesetzt,
  * nicht durch das Vertauschen der Inhalte der Knoten.
- *
- * @param ascending Falls 1, wird aufsteigend sortiert. Falls 0, wird absteigend sortiert.
+ * Falls ascending = 1, wird aufsteigend sortiert. Falls 0, wird absteigend sortiert.
  */
 void sortFlashcardsById(int ascending) {
     // Falls die Liste leer ist oder nur ein Element enthält, gibt es nichts zu sortieren
@@ -538,7 +539,7 @@ void sortFlashcardsById(int ascending) {
             // Prüfen, ob die Reihenfolge falsch ist
             int condition = ascending ? (current->id > nextNode->id) : (current->id < nextNode->id);
             if (condition) {
-                // **Tausche die Zeiger der Knoten, ohne deren Inhalte zu ändern**
+                // Tausche die Zeiger der Knoten, ohne deren Inhalte zu ändern
 
                 // Zeiger des vorherigen Elements auf das neue "erste" Element setzen
                 if (current->prev)
@@ -614,10 +615,6 @@ void update_card_interval_test(FlashcardNode *curr, int rating) {
     curr->interval = interval;
 }
 
-/*
- * summary:
- * Sortiert die verkettete Liste der Flashcards mittels Bubble Sort anhand des next_review Zeitstempels (aufsteigend).
- */
 /*
  * summary:
  * Sortiert die verkettete Liste der Flashcards anhand des `nextReview` Zeitstempels (aufsteigend),
