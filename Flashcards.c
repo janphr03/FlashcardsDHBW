@@ -32,7 +32,6 @@ FlashcardNode* ptrTail = NULL;
 int next_id = 1; // Nächste zu vergebende ID
 
 /*
- *FERTIG
  *summary:
  * Entfernt Zeilenumbruch aus einem String
  */
@@ -52,7 +51,7 @@ int directoryExists(const char *path) {
     return (attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_DIRECTORY));
 }
 
-/*FERTIG
+/*
  * summary:
  * Liest den Ordnerpfad aus der Konfigurationsdatei. Falls die Datei nicht existiert
  * oder der darin gespeicherte Ordner ungültig ist, wird der Nutzer aufgefordert, einen
@@ -149,7 +148,7 @@ void loadConfig(char *path) {
     }
 }
 
-/*FERTIG
+/*
  *summary:
  * erstellt eine neue Karteikarte, indem zuerst Speicher allokiert wird.
  * anschließend werden die Felder durch Konsoleneingabe definiert.
@@ -207,7 +206,7 @@ void addFlashcard() {
     printf("Karteikarte hinzugefuegt.\n");
 }
 
-/*FERTIG
+/*
  * summary:
  * Funktion zum Löschen einer Karteikarte anhand ihrer Nummer
  */
@@ -261,7 +260,7 @@ void deleteFlashcard() {
     printf("Karteikarte %d wurde geloescht.\n", number);
 }
 
-/*FERTIG
+/*
  *summary:
  * Diese Funktion listet alle vorhandenen Karteikarten in der verketteten Liste aus
  * Dabei zeigt sie auch den Zeitpunkt an, wann die Karteikarte das nächste Mal gelernt wird
@@ -290,7 +289,7 @@ void listFlashcards() {
     }
 }
 
-/*FERTIG
+/*
  * summary:
  * Funktion zum Lernen der Karteikarten ohne Spaced Rep Funktionalität einfach nur zum Durchgehen
  */
@@ -316,7 +315,7 @@ void studyFlashcards() {
     }
 }
 
-/*FERTIG
+/*
  * summary:
  * Gibt alle Karteikarten frei und setzt head und tail zurück
  * wird aufgerufen beim beenden der Anwendung (Nr.9) oder
@@ -333,7 +332,7 @@ void freeFlashcards() {
     ptrTail = NULL;
 }
 
-/*FERTIG
+/*
  * summary:
  * Funktion zum Speichern der Karteikarten in einer JSON-Datei.
  * Der Nutzer gibt dabei nur den Ordnerpfad an, der Dateiname "FlashcardsMemory.json" wird automatisch ergänzt.
@@ -413,7 +412,7 @@ void saveFlashcardsToFile() {
     printf("Karteikarten wurden in \"%s\" gespeichert.\n", flashcardsJSONFile);
 }
 
-/*FERTIG
+/*
  * summary:
  * lädt Flashcards aus einer JSON-Datei in eine verkettete Liste. Existierende Karten werden freigegeben,
  * neue Karten zeilenweise geparst und angehängt, und am Ende werden fortlaufende IDs vergeben.
@@ -577,7 +576,7 @@ void loadFlashcardsFromFile(const char *filename) {
     printf("%d Karteikarten geladen.\n", count - 1);
 }
 
-/*FERTIG
+/*
  * summary:
  * sortiert die Karteikarten in aufsteigender oder absteigender Reihenfolge anhand ihrer ID
  * tauscht die Zeiger (prev und next) der Knoten, statt deren Inhalte zu vertauschen
@@ -623,7 +622,7 @@ void sortFlashcardsById(int ascending) {
     } while (swapped);
 }
 
-/*FERTIG
+/*
  * summary:
  * aktualisiert Wiederholungsintervall einer Karte mittels SM-2-Algorithmus.
  * Die Intervalle werden in Minuten angegeben:
@@ -689,62 +688,63 @@ void updateCardInterval(FlashcardNode *curr, int rating) {
     curr->interval = interval;
 }
 
-/*FERTIG
+/*
  * summary:
  * sortiert die verkettete Liste der Flashcards anhand des NextReview Zeitstempels (aufsteigend),
  * sodass die am längsten überfälligen Karteikarten zuerst erscheinen.
  */
 void bubbleSortByNextReview() {
-    // prüft, ob die Liste leer ist oder nur ein Element enthält; falls ja, verlässt die Funktion.
+    // Falls die Liste leer oder nur ein Element vorhanden ist, ist kein Sortieren nötig.
     if (ptrHead == NULL || ptrHead->next == NULL)
         return;
 
     int swapped;
-    FlashcardNode *last = NULL; // begrenzt den Bereich der bereits sortierten Elemente.
+    FlashcardNode *last = NULL; // Markiert das Ende der bereits sortierten Elemente.
 
     do {
         swapped = 0;
         FlashcardNode *current = ptrHead;
 
-        // durchläuft die Liste bis zum Marker "last", der die bereits sortierten Elemente kennzeichnet.
+        // solange current->next noch nicht das "last"-Element erreicht hat
         while (current->next != last) {
             FlashcardNode *nextNode = current->next;
-
-            // prüft, ob das aktuelle Knotenpaar in falscher Reihenfolge steht (größere Zeitstempel sollen später kommen)
+            // wenn current und nextNode in falscher Reihenfolge stehen:
             if (current->nextReview > nextNode->nextReview) {
-                // tauscht die Zeiger der Knoten
+                // tausch der Knoten in der verketteten Liste
 
-                // setzt den Next-Zeiger des vorherigen Knotens auf nextNode
+                // verbindet den Vorgänger von current mit nextNode
                 if (current->prev)
                     current->prev->next = nextNode;
                 else
-                    ptrHead = nextNode; // aktualisiert den Kopf, falls current das erste Element ist
+                    ptrHead = nextNode; // current war Kopf der Liste
 
-                // setzt den Prev-Zeiger des nachfolgenden Knotens auf current
+                // verbindet den Nachfolger von nextNode mit current
                 if (nextNode->next)
                     nextNode->next->prev = current;
                 else
-                    ptrTail = current; // aktualisiert das Ende, falls nextNode das letzte Element ist
+                    ptrTail = current; // nextNode war am Ende der Liste
 
-                // kehrt die Verkettung zwischen Current und NextNode um
+                // vertauscht die Zeiger zwischen current und nextNode
                 current->next = nextNode->next;
                 nextNode->prev = current->prev;
-
                 nextNode->next = current;
                 current->prev = nextNode;
 
-                // markiert, dass ein Tausch erfolgt ist, sodass ein weiterer Durchlauf notwendig wird
                 swapped = 1;
+                // Nach einem Tausch soll current nicht sofort ++ werden,
+                // da current nun an der neuen Position erneut geprüft werden muss.
+                continue;
             }
-            // geht zum nächsten Knoten in der Liste
+            // Keine Änderung nötig – gehe zum nächsten Element.
             current = current->next;
         }
-        // setzt "last" auf den zuletzt verarbeiteten Knoten, der nun an der richtigen Position ist
+        // Das letzte Element, das im Durchlauf geprüft wurde, gilt als sortiert.
         last = current;
     } while (swapped);
 }
 
-/*FERTIG
+
+/*
  * summary:
  * Funktion für das Lernen im Testmodus: Karten werden basierend auf dem next_review Zeitstempel abgefragt.
  * Es werden nur Karten abgefragt, deren next_review <= der aktuellen Zeit ist.
@@ -866,6 +866,7 @@ int main() {
                 freeFlashcards();
                 printf("Programm beendet.\n");
                 exit(0);
+            // Dient nur dem Nutzerkomfort, falls man mehrere Karteikartendecks hat, kann man diese aufrufen (Pro Ordner aber nur eine Datei sonst würde sich der Name doppeln)
             case 10: {
                 // neuen Konfigurationspfad eingeben
                 printf("Geben Sie den neuen ORDNERpfad ein, in dem die Flashcards gespeichert werden sollen:\n> ");
@@ -883,7 +884,7 @@ int main() {
                     break;
                 }
                 size_t len = strlen(newPath);
-                // Stelle sicher, dass der Pfad mit einem Trenner endet (Backslash oder Slash)
+                // Stelle sicher, dass der Pfad mit einem Trenner endet
                 if (len > 0 && newPath[len - 1] != '\\' && newPath[len - 1] != '/') {
                     strncat(newPath, "\\", sizeof(newPath) - strlen(newPath) - 1);
                 }
