@@ -1,4 +1,4 @@
-Amleitung und README
+Anleitung und README
 =====================================
 
 Übersicht
